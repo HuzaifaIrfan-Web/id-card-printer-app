@@ -1,9 +1,26 @@
 # ID Card Printer — A4 CNIC Layout Tool
 
-**v0.1.0** · Developed by [Huzaifa Irfan](https://huzaifairfan.com/) · [hi@huzaifairfan.com](mailto:hi@huzaifairfan.com) · [GitHub](https://github.com/HuzaifaIrfan-Web/id-card-printer-app)
 
 A React web app (no backend, nothing ever leaves your browser) for printing
-Pakistani CNIC-size ID cards on A4 paper at actual size — 8 cards per sheet.
+Pakistani CNIC-size ID cards on A4 paper at actual size — 10 cards per sheet.
+
+
+**v0.1.0** · Developed by [Huzaifa Irfan](https://huzaifairfan.com/) · [hi@huzaifairfan.com](mailto:hi@huzaifairfan.com) · [GitHub](https://github.com/HuzaifaIrfan-Web/id-card-printer-app)
+
+
+Last Updated on 2026-07-29
+<hr />
+
+## Web App Preview
+
+https://id-print.web.app/
+
+
+## 🎬 Demo
+
+[▶️![Demo](https://img.youtube.com/vi/Sba7TPTY4/maxresdefault.jpg)](https://www.youtube.com/watch?v=Sba7TPTY4)
+
+
 
 ## Run it
 
@@ -76,3 +93,25 @@ card before running your full batch or switching to card stock.
 - The default card size matches the standard ID-1 card format used for
   Pakistani CNICs (and most other national ID/credit cards). You can change
   it in Layout settings if you're printing a different card size.
+
+
+
+# 📝 Documentation
+
+# 📚 References
+
+# 🤝🏻 Connect with Me
+
+## Huzaifa Irfan
+
+- 💬 Just want to say hi?
+- 🚀 Have a project to discuss?
+- 📧 Email me @: [hi@huzaifairfan.com](mailto:hi@huzaifairfan.com)
+- 📞 Visit my Profile for other channels:
+
+[![GitHub](https://img.shields.io/badge/Github-%23222.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/HuzaifaIrfan/)
+[![Website](https://img.shields.io/badge/Website-%23222.svg?style=for-the-badge&logo=google-chrome&logoColor==%234285F4)](https://www.huzaifairfan.com)
+
+# 📜 License
+
+Licensed under the GPL3 License, Copyright 2026 Huzaifa Irfan. [LICENSE](LICENSE)

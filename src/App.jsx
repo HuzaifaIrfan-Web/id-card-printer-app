@@ -36,11 +36,12 @@ export default function App() {
     <div className="app">
       <header className="app-header no-print">
         <div className="app-header__mark" aria-hidden="true">
+          {/* <span className="tick" />
           <span className="tick" />
           <span className="tick" />
           <span className="tick" />
-          <span className="tick" />
-          <span className="tick" />
+          <span className="tick" /> */}
+          <img src="/icon.png" alt="Site Logo" className="header-icon" />
         </div>
         <div>
           <h1>
