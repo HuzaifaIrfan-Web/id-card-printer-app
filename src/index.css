@@ -14,14 +14,7 @@
 
 * { box-sizing: border-box; }
 
-.header-icon {
-  width: 50px;  /* Control exact size */
-  height: 50px; 
-  object-fit: contain; /* Prevents image distortion */
-}
-
 body {
-
   margin: 0;
   background: var(--paper);
   color: var(--ink);
