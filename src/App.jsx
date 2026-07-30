@@ -35,13 +35,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header no-print">
-        <div className="app-header__mark" aria-hidden="true">
-          <span className="tick" />
-          <span className="tick" />
-          <span className="tick" />
-          <span className="tick" />
-          <span className="tick" />
-        </div>
+        <img className="app-header__icon" src="/icons/icon-192.png" alt="" width="48" height="48" />
         <div>
           <h1>
             {APP_NAME} <span className="version-badge">v{APP_VERSION}</span>

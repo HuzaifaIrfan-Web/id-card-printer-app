@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { MODES, buildSheets, mirroredPosition, backRotation } from '../utils/layout.js'
+import { MODES, buildSheets, computeLayout, mirroredPosition, backRotation } from '../utils/layout.js'
 import { APP_NAME, APP_VERSION, AUTHOR } from '../meta.js'
 
-function Page({ cssVars, rows, cells, showGuides, pageKind, pageNum, totalPages, showChrome }) {
+function Page({ cssVars, cols, rows, cells, showGuides, pageKind, pageNum, totalPages, showChrome }) {
   return (
     <div className="a4-page" style={cssVars} data-page-kind={pageKind}>
       {showChrome && (
@@ -10,7 +10,13 @@ function Page({ cssVars, rows, cells, showGuides, pageKind, pageNum, totalPages,
           {APP_NAME} v{APP_VERSION} · Developed by {AUTHOR.name}
         </div>
       )}
-      <div className="grid8" style={{ gridTemplateRows: `repeat(${rows}, var(--card-h))` }}>
+      <div
+        className="grid8"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, var(--card-w))`,
+          gridTemplateRows: `repeat(${rows}, var(--card-h))`,
+        }}
+      >
         {cells.map((c) => (
           <div
             key={c.key}
@@ -38,21 +44,15 @@ function Page({ cssVars, rows, cells, showGuides, pageKind, pageNum, totalPages,
 export default function PrintView({ cards, settings }) {
   const [phase, setPhase] = useState(null) // null | 'fronts' | 'backs'
   const mode = MODES[settings.mode]
-  const sheets = buildSheets(cards, settings.mode)
-  const rows = mode.rows
-
-  const contentW = 2 * settings.cardWidth + settings.gap
-  const contentH = rows * settings.cardHeight + (rows - 1) * settings.gap
-  const marginX = Math.max(0, (210 - contentW) / 2)
-  const marginY = Math.max(0, (297 - contentH) / 2)
-  const overflow = contentW > 210 || contentH > 297
+  const layout = computeLayout(settings.cardWidth, settings.cardHeight, settings.gap, settings.mode)
+  const sheets = buildSheets(cards, settings.mode, settings)
 
   const cssVars = {
     '--card-w': `${settings.cardWidth}mm`,
     '--card-h': `${settings.cardHeight}mm`,
     '--gap': `${settings.gap}mm`,
-    '--margin-x': `${marginX}mm`,
-    '--margin-y': `${marginY}mm`,
+    '--margin-x': `${layout.marginX}mm`,
+    '--margin-y': `${layout.marginY}mm`,
   }
 
   useEffect(() => {
@@ -75,32 +75,36 @@ export default function PrintView({ cards, settings }) {
     sheets.forEach((sheet, sIdx) => {
       const cells = sheet.pairs.map(({ item, pairIndex }) => {
         if (sheet.foldAxis === 'lr') {
-          const row = pairIndex
+          const pairsPerRow = sheet.cols / 2
+          const row = Math.floor(pairIndex / pairsPerRow)
+          const pairCol = pairIndex % pairsPerRow
+          const frontCol = pairCol * 2
           return [
-            { key: `${sIdx}-${pairIndex}-f`, row, col: 0, image: item?.front },
+            { key: `${sIdx}-${pairIndex}-f`, row, col: frontCol, image: item?.front },
             {
               key: `${sIdx}-${pairIndex}-b`,
               row,
-              col: 1,
+              col: frontCol + 1,
               image: item?.back,
               transform: settings.rotateFoldBack ? 'rotate(180deg)' : undefined,
             },
           ]
         }
-        const col = pairIndex % 2
-        const rowPair = Math.floor(pairIndex / 2) * 2
+        const pairRow = Math.floor(pairIndex / sheet.cols)
+        const col = pairIndex % sheet.cols
+        const frontRow = pairRow * 2
         return [
-          { key: `${sIdx}-${pairIndex}-f`, row: rowPair, col, image: item?.front },
+          { key: `${sIdx}-${pairIndex}-f`, row: frontRow, col, image: item?.front },
           {
             key: `${sIdx}-${pairIndex}-b`,
-            row: rowPair + 1,
+            row: frontRow + 1,
             col,
             image: item?.back,
             transform: settings.rotateFoldBack ? 'rotate(180deg)' : undefined,
           },
         ]
       })
-      pages.push({ key: `fold-${sIdx}`, kind: 'single', rows: sheet.rows, cells: cells.flat() })
+      pages.push({ key: `fold-${sIdx}`, kind: 'single', cols: sheet.cols, rows: sheet.rows, cells: cells.flat() })
     })
   } else {
     sheets.forEach((sheet, sIdx) => {
@@ -112,7 +116,7 @@ export default function PrintView({ cards, settings }) {
       }))
       const rotation = backRotation(sheet.flipAxis)
       const backCells = sheet.items.map(({ item, row, col }) => {
-        const pos = mirroredPosition(row, col, sheet.flipAxis, sheet.rows)
+        const pos = mirroredPosition(row, col, sheet.flipAxis, sheet.rows, sheet.cols)
         return {
           key: `${sIdx}-back-${row}-${col}`,
           row: pos.row,
@@ -122,12 +126,12 @@ export default function PrintView({ cards, settings }) {
         }
       })
       if (phase === 'fronts') {
-        pages.push({ key: `${sIdx}-front`, kind: 'front', rows: sheet.rows, cells: frontCells })
+        pages.push({ key: `${sIdx}-front`, kind: 'front', cols: sheet.cols, rows: sheet.rows, cells: frontCells })
       } else if (phase === 'backs') {
-        pages.push({ key: `${sIdx}-back`, kind: 'back', rows: sheet.rows, cells: backCells })
+        pages.push({ key: `${sIdx}-back`, kind: 'back', cols: sheet.cols, rows: sheet.rows, cells: backCells })
       } else {
-        pages.push({ key: `${sIdx}-front`, kind: 'front', rows: sheet.rows, cells: frontCells })
-        pages.push({ key: `${sIdx}-back`, kind: 'back', rows: sheet.rows, cells: backCells })
+        pages.push({ key: `${sIdx}-front`, kind: 'front', cols: sheet.cols, rows: sheet.rows, cells: frontCells })
+        pages.push({ key: `${sIdx}-back`, kind: 'back', cols: sheet.cols, rows: sheet.rows, cells: backCells })
       }
     })
   }
@@ -138,12 +142,16 @@ export default function PrintView({ cards, settings }) {
         <div className="print-controls__info">
           <h3>{mode.label}</h3>
           <p>{mode.description}</p>
-          {overflow && (
+          <p className="layout-info">
+            {layout.cols} column{layout.cols !== 1 ? 's' : ''} × {layout.rows} row{layout.rows !== 1 ? 's' : ''} ={' '}
+            {layout.perSheet} card{layout.perSheet !== 1 ? 's' : ''} per sheet, at this card size.
+          </p>
+          {layout.overflow && (
             <p className="warning">
-              Card size + gap is larger than an A4 sheet can fit in this grid. Reduce card size or gap in Settings.
+              Card size + gap is larger than an A4 sheet can fit. Reduce card size or gap in Settings.
             </p>
           )}
-          {!overflow && marginY < 8 && (
+          {!layout.overflow && layout.marginY < 8 && (
             <p className="warning">
               Margin is too tight to show the header/footer and page numbers on this layout — they're hidden so they
               don't overlap the cards.
@@ -184,13 +192,14 @@ export default function PrintView({ cards, settings }) {
           <Page
             key={p.key}
             cssVars={cssVars}
+            cols={p.cols}
             rows={p.rows}
             cells={p.cells}
             showGuides={settings.showGuides}
             pageKind={p.kind}
             pageNum={idx + 1}
             totalPages={pages.length}
-            showChrome={marginY >= 8}
+            showChrome={layout.marginY >= 8}
           />
         ))}
       </div>

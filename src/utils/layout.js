@@ -1,21 +1,22 @@
 // Core sizing + pagination logic for the ID card print tool.
-// Grid is 2 columns wide. With the standard ID-1 card size (85.6mm x
-// 53.98mm), 2 columns (171.2mm) and up to 5 rows (269.9mm) both fit
-// comfortably inside an A4 sheet (210mm x 297mm) in portrait orientation,
-// giving 10 cards per side instead of 8.
+//
+// The grid is no longer fixed at 2 columns — it's computed from the actual
+// card size so smaller cards automatically fit more per page, while a
+// minimum safe margin is always kept on all four sides of the sheet.
 
 export const A4 = { width: 210, height: 297 }
 
-export const GRID_COLS = 2
-
 export const DEFAULT_CARD = { width: 85.6, height: 53.98 } // ID-1 / CNIC size, mm
+
+// Minimum margin kept clear on every side of the sheet (mm), regardless of
+// how many cards end up fitting.
+export const MIN_MARGIN = 6
 
 export const MODES = {
   'duplex-long': {
     label: 'Duplex — Flip on Long Edge',
     group: 'duplex',
     flipAxis: 'h',
-    rows: 5,
     description:
       'One print job. Your printer\u2019s duplex unit prints fronts then backs automatically, flipping each sheet along its long (vertical) edge — the common default for portrait duplex printing.',
   },
@@ -23,7 +24,6 @@ export const MODES = {
     label: 'Duplex — Flip on Short Edge',
     group: 'duplex',
     flipAxis: 'v',
-    rows: 5,
     description:
       'One print job. Your printer\u2019s duplex unit prints fronts then backs automatically, flipping each sheet along its short (horizontal) edge.',
   },
@@ -31,7 +31,6 @@ export const MODES = {
     label: 'Manual Duplex — Flip on Long Edge',
     group: 'manual',
     flipAxis: 'h',
-    rows: 5,
     description:
       'Two separate print runs. Print all fronts, take the stack out, flip each sheet over its long (vertical) edge like turning a book page, reload, then print all backs.',
   },
@@ -39,7 +38,6 @@ export const MODES = {
     label: 'Manual Duplex — Flip on Short Edge',
     group: 'manual',
     flipAxis: 'v',
-    rows: 5,
     description:
       'Two separate print runs. Print all fronts, take the stack out, flip each sheet over its short (horizontal) edge like flipping a notepad page, reload, then print all backs.',
   },
@@ -47,7 +45,6 @@ export const MODES = {
     label: 'Single Side — Fold Left/Right',
     group: 'fold',
     foldAxis: 'lr',
-    rows: 5,
     description:
       'One single-sided print job. Front and a mirrored back sit side by side. Cut each pair out and fold along the vertical centre line so the back lands directly behind the front.',
   },
@@ -55,18 +52,49 @@ export const MODES = {
     label: 'Single Side — Fold Top/Bottom',
     group: 'fold',
     foldAxis: 'tb',
-    rows: 4, // needs an even row count so fronts/backs pair up cleanly
     description:
       'One single-sided print job. Front sits above a mirrored back. Cut each pair out and fold along the horizontal centre line so the back lands directly behind the front.',
   },
 }
 
-// How many finished physical cards one sheet/side produces for a given mode.
-export function perSheetCount(mode) {
+// How many cards fit edge-to-edge (plus gaps) inside a given span, keeping
+// MIN_MARGIN clear on both ends of that span.
+function maxFit(pageSpan, cardSpan, gap) {
+  const available = pageSpan - 2 * MIN_MARGIN
+  const count = Math.floor((available + gap) / (cardSpan + gap))
+  return Math.max(1, count)
+}
+
+// Compute the full grid + margins for a given card size and mode. Fold
+// modes need an even count along their fold axis so fronts and backs pair
+// up cleanly; everything else just maximises how many cards fit.
+export function computeLayout(cardWidth, cardHeight, gap, modeKey) {
+  const mode = MODES[modeKey]
+  let cols = maxFit(A4.width, cardWidth, gap)
+  let rows = maxFit(A4.height, cardHeight, gap)
+
   if (mode.group === 'fold') {
-    return mode.foldAxis === 'tb' ? (mode.rows / 2) * GRID_COLS : mode.rows
+    if (mode.foldAxis === 'lr') {
+      cols = Math.max(2, cols - (cols % 2))
+    } else {
+      rows = Math.max(2, rows - (rows % 2))
+    }
   }
-  return mode.rows * GRID_COLS
+
+  const contentW = cols * cardWidth + (cols - 1) * gap
+  const contentH = rows * cardHeight + (rows - 1) * gap
+  const marginX = Math.max(0, (A4.width - contentW) / 2)
+  const marginY = Math.max(0, (A4.height - contentH) / 2)
+  const overflow = contentW > A4.width || contentH > A4.height
+
+  let perSheet
+  if (mode.group === 'fold') {
+    perSheet = mode.foldAxis === 'lr' ? (cols / 2) * rows : cols * (rows / 2)
+  } else {
+    perSheet = cols * rows
+  }
+
+  return { cols, rows, marginX, marginY, contentW, contentH, overflow, perSheet }
 }
 
 // Expand card entries (each with a `count`) into a flat, ordered queue of
@@ -106,16 +134,25 @@ export function paginate(queue, size) {
 // the back page must sit in the mirrored row (counted bottom-to-top), same
 // column, AND the image itself is rotated 180° in place so it reads right
 // side up once the sheet is flipped — standard "calendar style" duplex.
-export function mirroredPosition(row, col, flipAxis, rows) {
+export function mirroredPosition(row, col, flipAxis, rows, cols) {
   if (flipAxis === 'h') {
-    return { row, col: 1 - col }
+    return { row, col: cols - 1 - col }
   }
-  // flipAxis === 'v' -> rows reverse (bottom-to-top), image also rotated 180°
   return { row: rows - 1 - row, col }
 }
 
 export function backRotation(flipAxis) {
   return flipAxis === 'v' ? 180 : 0
+}
+
+export function gridPositions(cols, rows) {
+  const positions = []
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      positions.push({ row, col })
+    }
+  }
+  return positions
 }
 
 // Turn the card list into an array of "sheets" ready to render.
@@ -124,34 +161,28 @@ export function backRotation(flipAxis) {
 //   render time via mirroredPosition().
 // - fold sheets: { type:'fold', pairs:[{item,pairIndex}] } — front/back pairs
 //   per single-sided sheet.
-export function buildSheets(cards, modeKey) {
+export function buildSheets(cards, modeKey, settings) {
   const mode = MODES[modeKey]
+  const layout = computeLayout(settings.cardWidth, settings.cardHeight, settings.gap, modeKey)
   const queue = expandQueue(cards)
-  const perSheet = perSheetCount(mode)
-  const pages = paginate(queue, perSheet)
+  const pages = paginate(queue, layout.perSheet)
+
   if (mode.group === 'fold') {
     return pages.map((page) => ({
       type: 'fold',
       foldAxis: mode.foldAxis,
-      rows: mode.rows,
+      cols: layout.cols,
+      rows: layout.rows,
       pairs: page.map((item, i) => ({ item, pairIndex: i })),
     }))
   }
-  const positions = gridPositions(mode.rows)
+
+  const positions = gridPositions(layout.cols, layout.rows)
   return pages.map((page) => ({
     type: 'duplex',
     flipAxis: mode.flipAxis,
-    rows: mode.rows,
+    cols: layout.cols,
+    rows: layout.rows,
     items: page.map((item, i) => ({ item, ...positions[i] })),
   }))
-}
-
-export function gridPositions(rows) {
-  const positions = []
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < GRID_COLS; col++) {
-      positions.push({ row, col })
-    }
-  }
-  return positions
 }
